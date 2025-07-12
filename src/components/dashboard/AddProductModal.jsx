@@ -8,23 +8,43 @@ import Input from '../common/Input';
 
 const { FiX, FiLink, FiDollarSign, FiTag } = FiIcons;
 
-const AddProductModal = ({ onClose, onAdd }) => {
+const AddProductModal = ({ onClose, onAdd, product = null, isEditing = false }) => {
   const [loading, setLoading] = useState(false);
-  const { register, handleSubmit, formState: { errors }, watch } = useForm();
-
+  
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    watch,
+    setValue
+  } = useForm({
+    defaultValues: product ? {
+      name: product.name,
+      url: product.url,
+      current_price: product.current_price,
+      target_price: product.target_price
+    } : {}
+  });
+  
   const url = watch('url');
 
   const onSubmit = async (data) => {
     setLoading(true);
     try {
-      // Extract product name from URL or use provided name
+      // Prepara i dati del prodotto
       const productData = {
         ...data,
         current_price: parseFloat(data.current_price) || 0,
         target_price: parseFloat(data.target_price),
-        image: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=300&h=300&fit=crop'
+        image: product?.image || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=300&h=300&fit=crop'
       };
       
+      // Se stiamo modificando, aggiungi l'ID
+      if (isEditing && product) {
+        productData.id = product.id;
+      }
+      
+      // Chiama la funzione di callback
       await onAdd(productData);
     } catch (error) {
       console.error('Error adding product:', error);
@@ -44,13 +64,9 @@ const AddProductModal = ({ onClose, onAdd }) => {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-bold text-gray-900">
-            Aggiungi Prodotto
+            {isEditing ? 'Modifica Prodotto' : 'Aggiungi Prodotto'}
           </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-          >
+          <Button variant="ghost" size="sm" onClick={onClose}>
             <SafeIcon icon={FiX} />
           </Button>
         </div>
@@ -62,7 +78,7 @@ const AddProductModal = ({ onClose, onAdd }) => {
               label="URL del prodotto"
               type="url"
               placeholder="https://example.com/prodotto"
-              {...register('url', { 
+              {...register('url', {
                 required: 'URL richiesto',
                 pattern: {
                   value: /^https?:\/\/.+/,
@@ -70,9 +86,10 @@ const AddProductModal = ({ onClose, onAdd }) => {
                 }
               })}
               error={errors.url?.message}
+              disabled={isEditing}
             />
             <p className="text-xs text-gray-500 mt-1">
-              Incolla l'URL del prodotto da monitorare
+              {isEditing ? "L'URL non può essere modificato" : "Incolla l'URL del prodotto da monitorare"}
             </p>
           </div>
 
@@ -81,7 +98,7 @@ const AddProductModal = ({ onClose, onAdd }) => {
               label="Nome del prodotto"
               type="text"
               placeholder="iPhone 15 Pro"
-              {...register('name', { 
+              {...register('name', {
                 required: 'Nome richiesto',
                 minLength: {
                   value: 2,
@@ -99,22 +116,26 @@ const AddProductModal = ({ onClose, onAdd }) => {
                 type="number"
                 step="0.01"
                 placeholder="999.99"
-                {...register('current_price')}
+                {...register('current_price', {
+                  valueAsNumber: true,
+                  validate: value => 
+                    !isNaN(value) && value >= 0 || 'Il prezzo deve essere un numero positivo'
+                })}
                 error={errors.current_price?.message}
               />
               <p className="text-xs text-gray-500 mt-1">
-                Opzionale - verrà rilevato automaticamente
+                {isEditing ? "Prezzo attuale rilevato" : "Opzionale - verrà rilevato automaticamente"}
               </p>
             </div>
-
             <div>
               <Input
                 label="Prezzo obiettivo (€)"
                 type="number"
                 step="0.01"
                 placeholder="799.99"
-                {...register('target_price', { 
+                {...register('target_price', {
                   required: 'Prezzo obiettivo richiesto',
+                  valueAsNumber: true,
                   min: {
                     value: 0.01,
                     message: 'Il prezzo deve essere maggiore di 0'
@@ -125,16 +146,18 @@ const AddProductModal = ({ onClose, onAdd }) => {
             </div>
           </div>
 
-          <div className="bg-blue-50 rounded-lg p-4">
-            <h4 className="text-sm font-medium text-blue-900 mb-2">
-              📱 Come funziona:
-            </h4>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Monitoriamo il prezzo ogni ora</li>
-              <li>• Ti avvisiamo quando scende sotto l'obiettivo</li>
-              <li>• Puoi modificare l'obiettivo in qualsiasi momento</li>
-            </ul>
-          </div>
+          {!isEditing && (
+            <div className="bg-blue-50 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-blue-900 mb-2">
+                📱 Come funziona:
+              </h4>
+              <ul className="text-sm text-blue-800 space-y-1">
+                <li>• Monitoriamo il prezzo ogni ora</li>
+                <li>• Ti avvisiamo quando scende sotto l'obiettivo</li>
+                <li>• Puoi modificare l'obiettivo in qualsiasi momento</li>
+              </ul>
+            </div>
+          )}
 
           <div className="flex space-x-3">
             <Button
@@ -145,12 +168,8 @@ const AddProductModal = ({ onClose, onAdd }) => {
             >
               Annulla
             </Button>
-            <Button
-              type="submit"
-              loading={loading}
-              className="flex-1"
-            >
-              Aggiungi Prodotto
+            <Button type="submit" loading={loading} className="flex-1">
+              {isEditing ? 'Salva Modifiche' : 'Aggiungi Prodotto'}
             </Button>
           </div>
         </form>

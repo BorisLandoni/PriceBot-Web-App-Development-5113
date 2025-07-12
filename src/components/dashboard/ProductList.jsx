@@ -9,7 +9,7 @@ import { it } from 'date-fns/locale';
 
 const { FiExternalLink, FiTrash2, FiEdit, FiTrendingDown, FiTrendingUp, FiTarget } = FiIcons;
 
-const ProductList = ({ products, loading, onDelete, onSelect }) => {
+const ProductList = ({ products, loading, onDelete, onSelect, onEdit }) => {
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow-sm p-8">
@@ -36,37 +36,24 @@ const ProductList = ({ products, loading, onDelete, onSelect }) => {
           Inizia aggiungendo il primo prodotto da monitorare
         </p>
         <Button>
-          <SafeIcon icon={FiTarget} className="mr-2" />
-          Aggiungi Prodotto
+          <SafeIcon icon={FiTarget} className="mr-2" /> Aggiungi Prodotto
         </Button>
       </motion.div>
     );
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'target_reached':
-        return 'bg-green-100 text-green-800';
-      case 'monitoring':
-        return 'bg-blue-100 text-blue-800';
-      case 'error':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const getStatusColor = (current_price, target_price) => {
+    if (current_price <= target_price) {
+      return 'bg-green-100 text-green-800';
     }
+    return 'bg-blue-100 text-blue-800';
   };
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'target_reached':
-        return 'Obiettivo Raggiunto';
-      case 'monitoring':
-        return 'Monitoraggio';
-      case 'error':
-        return 'Errore';
-      default:
-        return 'Sconosciuto';
+  const getStatusText = (current_price, target_price) => {
+    if (current_price <= target_price) {
+      return 'Obiettivo Raggiunto';
     }
+    return 'Monitoraggio';
   };
 
   const getPriceIcon = (currentPrice, targetPrice) => {
@@ -83,10 +70,10 @@ const ProductList = ({ products, loading, onDelete, onSelect }) => {
           I tuoi prodotti ({products.length})
         </h2>
       </div>
-
       <div className="space-y-4">
         {products.map((product, index) => {
           const priceInfo = getPriceIcon(product.current_price, product.target_price);
+          const formattedDate = new Date(product.last_checked || new Date());
           
           return (
             <motion.div
@@ -101,12 +88,11 @@ const ProductList = ({ products, loading, onDelete, onSelect }) => {
                 {/* Product Image */}
                 <div className="flex-shrink-0">
                   <img
-                    src={product.image}
+                    src={product.image || "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=300&h=300&fit=crop"}
                     alt={product.name}
                     className="w-16 h-16 rounded-lg object-cover"
                   />
                 </div>
-
                 {/* Product Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between">
@@ -114,7 +100,6 @@ const ProductList = ({ products, loading, onDelete, onSelect }) => {
                       <h3 className="text-lg font-semibold text-gray-900 mb-1">
                         {product.name}
                       </h3>
-                      
                       <div className="flex items-center space-x-4 mb-3">
                         <div className="flex items-center space-x-2">
                           <SafeIcon icon={priceInfo.icon} className={`${priceInfo.color}`} />
@@ -122,26 +107,24 @@ const ProductList = ({ products, loading, onDelete, onSelect }) => {
                             €{product.current_price}
                           </span>
                         </div>
-                        
                         <div className="text-gray-500">
                           Obiettivo: <span className="font-medium">€{product.target_price}</span>
                         </div>
                       </div>
-
                       <div className="flex items-center space-x-4 text-sm text-gray-500">
                         <span>
-                          Ultimo controllo: {formatDistanceToNow(new Date(product.last_checked), { 
-                            addSuffix: true, 
-                            locale: it 
-                          })}
+                          Ultimo controllo: {formatDistanceToNow(formattedDate, { addSuffix: true, locale: it })}
                         </span>
-                        
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
-                          {getStatusText(product.status)}
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                            product.current_price,
+                            product.target_price
+                          )}`}
+                        >
+                          {getStatusText(product.current_price, product.target_price)}
                         </span>
                       </div>
                     </div>
-
                     {/* Actions */}
                     <div className="flex items-center space-x-2">
                       <Button
@@ -154,18 +137,16 @@ const ProductList = ({ products, loading, onDelete, onSelect }) => {
                       >
                         <SafeIcon icon={FiExternalLink} />
                       </Button>
-                      
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          // Handle edit
+                          onEdit(product);
                         }}
                       >
                         <SafeIcon icon={FiEdit} />
                       </Button>
-                      
                       <Button
                         variant="ghost"
                         size="sm"

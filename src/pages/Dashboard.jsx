@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import * as FiIcons from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
-import { apiClient } from '../lib/api';
 import SafeIcon from '../common/SafeIcon';
 import Button from '../components/common/Button';
 import DashboardHeader from '../components/dashboard/DashboardHeader';
@@ -11,6 +10,8 @@ import ProductList from '../components/dashboard/ProductList';
 import AddProductModal from '../components/dashboard/AddProductModal';
 import StatsCards from '../components/dashboard/StatsCards';
 import PriceChart from '../components/dashboard/PriceChart';
+import { productApi } from '../lib/apiClient';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 
 const { FiPlus, FiTrendingDown, FiBell, FiShoppingCart, FiDollarSign } = FiIcons;
 
@@ -20,15 +21,30 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
 
   useEffect(() => {
     loadProducts();
-  }, [user]);
+  }, []);
 
   const loadProducts = async () => {
     try {
       setLoading(true);
-      // For now, use mock data until backend is connected
+      
+      // Tenta di caricare i prodotti dall'API
+      try {
+        const fetchedProducts = await productApi.getProducts();
+        
+        // Se otteniamo prodotti validi, li utilizziamo
+        if (fetchedProducts && Array.isArray(fetchedProducts)) {
+          setProducts(fetchedProducts);
+          return;
+        }
+      } catch (apiError) {
+        console.warn('API fetch failed, using mock data:', apiError);
+      }
+      
+      // Fallback ai dati di esempio se l'API fallisce
       const mockProducts = [
         {
           id: 1,
@@ -37,9 +53,7 @@ const Dashboard = () => {
           current_price: 1199.99,
           target_price: 1000.00,
           image: 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=300&h=300&fit=crop',
-          status: 'monitoring',
-          created_at: '2024-01-15T10:00:00Z',
-          last_checked: '2024-01-20T15:30:00Z'
+          last_checked: new Date().toISOString()
         },
         {
           id: 2,
@@ -48,9 +62,7 @@ const Dashboard = () => {
           current_price: 1399.99,
           target_price: 1200.00,
           image: 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=300&h=300&fit=crop',
-          status: 'monitoring',
-          created_at: '2024-01-10T14:20:00Z',
-          last_checked: '2024-01-20T15:25:00Z'
+          last_checked: new Date().toISOString()
         },
         {
           id: 3,
@@ -59,13 +71,13 @@ const Dashboard = () => {
           current_price: 299.99,
           target_price: 250.00,
           image: 'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=300&h=300&fit=crop',
-          status: 'target_reached',
-          created_at: '2024-01-08T09:15:00Z',
-          last_checked: '2024-01-20T15:20:00Z'
+          last_checked: new Date().toISOString()
         }
       ];
+      
       setProducts(mockProducts);
     } catch (error) {
+      console.error('Error loading products:', error);
       toast.error('Errore nel caricamento dei prodotti');
     } finally {
       setLoading(false);
@@ -74,48 +86,138 @@ const Dashboard = () => {
 
   const handleAddProduct = async (productData) => {
     try {
-      // Mock add product
-      const newProduct = {
-        id: Date.now(),
-        ...productData,
-        status: 'monitoring',
-        created_at: new Date().toISOString(),
-        last_checked: new Date().toISOString()
-      };
+      setLoading(true);
+      
+      // Tenta di aggiungere il prodotto tramite l'API
+      let newProduct;
+      try {
+        newProduct = await productApi.createProduct(productData);
+      } catch (apiError) {
+        console.warn('API create failed, using mock data:', apiError);
+        
+        // Crea un prodotto simulato se l'API fallisce
+        newProduct = {
+          id: Date.now(),
+          ...productData,
+          last_checked: new Date().toISOString()
+        };
+      }
       
       setProducts(prev => [newProduct, ...prev]);
       setShowAddModal(false);
       toast.success('Prodotto aggiunto con successo!');
     } catch (error) {
+      console.error('Error adding product:', error);
       toast.error('Errore nell\'aggiunta del prodotto');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditProduct = async (productData) => {
+    try {
+      setLoading(true);
+      
+      // Tenta di aggiornare il prodotto tramite l'API
+      let updatedProduct;
+      try {
+        updatedProduct = await productApi.updateProduct(productData.id, productData);
+      } catch (apiError) {
+        console.warn('API update failed, using mock data:', apiError);
+        
+        // Aggiorna localmente se l'API fallisce
+        updatedProduct = {
+          ...productData,
+          last_checked: new Date().toISOString()
+        };
+      }
+      
+      setProducts(prev => prev.map(p => 
+        p.id === updatedProduct.id ? updatedProduct : p
+      ));
+      setEditingProduct(null);
+      toast.success('Prodotto aggiornato con successo!');
+    } catch (error) {
+      console.error('Error updating product:', error);
+      toast.error('Errore nell\'aggiornamento del prodotto');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDeleteProduct = async (productId) => {
     try {
+      setLoading(true);
+      
+      // Tenta di eliminare il prodotto tramite l'API
+      try {
+        await productApi.deleteProduct(productId);
+      } catch (apiError) {
+        console.warn('API delete failed, proceeding with local delete:', apiError);
+      }
+      
+      // Rimuovi il prodotto dalla lista locale
       setProducts(prev => prev.filter(p => p.id !== productId));
+      
+      // Se il prodotto eliminato era quello selezionato, deselezionalo
+      if (selectedProduct && selectedProduct.id === productId) {
+        setSelectedProduct(null);
+      }
+      
       toast.success('Prodotto rimosso con successo!');
     } catch (error) {
+      console.error('Error deleting product:', error);
       toast.error('Errore nella rimozione del prodotto');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const stats = {
-    totalProducts: products.length,
-    activeMonitoring: products.filter(p => p.status === 'monitoring').length,
-    targetsReached: products.filter(p => p.status === 'target_reached').length,
-    totalSavings: products.reduce((acc, p) => {
-      if (p.status === 'target_reached') {
-        return acc + (p.current_price - p.target_price);
+  // Calcola le statistiche basate sui prodotti
+  const calculateStats = () => {
+    const totalProducts = products.length;
+    
+    const activeMonitoring = products.filter(p => 
+      p.current_price > p.target_price
+    ).length;
+    
+    const targetsReached = products.filter(p => 
+      p.current_price <= p.target_price
+    ).length;
+    
+    const totalSavings = products.reduce((acc, p) => {
+      if (p.current_price <= p.target_price) {
+        // Calcola il risparmio rispetto al prezzo originale stimato (10% in più)
+        const originalEstimate = p.target_price * 1.1;
+        return acc + (originalEstimate - p.current_price);
       }
       return acc;
-    }, 0)
+    }, 0);
+    
+    return {
+      totalProducts,
+      activeMonitoring,
+      targetsReached,
+      totalSavings
+    };
   };
+
+  const stats = calculateStats();
+
+  if (loading && products.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <LoadingSpinner size="xl" className="mx-auto" />
+          <p className="mt-4 text-gray-600">Caricamento dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <DashboardHeader />
-      
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         {/* Welcome Section */}
         <motion.div
@@ -125,7 +227,7 @@ const Dashboard = () => {
           className="mb-8"
         >
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Ciao, {user?.user_metadata?.full_name || 'Utente'}! 👋
+            Ciao, {user?.user_metadata?.full_name || user?.email || 'Utente'}! 👋
           </h1>
           <p className="text-gray-600">
             Ecco un riepilogo dei tuoi prodotti monitorati
@@ -149,10 +251,8 @@ const Dashboard = () => {
             <SafeIcon icon={FiPlus} />
             <span>Aggiungi Prodotto</span>
           </Button>
-          
           <Button variant="outline">
-            <SafeIcon icon={FiBell} className="mr-2" />
-            Impostazioni Notifiche
+            <SafeIcon icon={FiBell} className="mr-2" /> Impostazioni Notifiche
           </Button>
         </motion.div>
 
@@ -165,6 +265,7 @@ const Dashboard = () => {
               loading={loading}
               onDelete={handleDeleteProduct}
               onSelect={setSelectedProduct}
+              onEdit={setEditingProduct}
             />
           </div>
 
@@ -180,6 +281,16 @@ const Dashboard = () => {
         <AddProductModal
           onClose={() => setShowAddModal(false)}
           onAdd={handleAddProduct}
+        />
+      )}
+      
+      {/* Edit Product Modal */}
+      {editingProduct && (
+        <AddProductModal
+          product={editingProduct}
+          onClose={() => setEditingProduct(null)}
+          onAdd={handleEditProduct}
+          isEditing={true}
         />
       )}
     </div>
